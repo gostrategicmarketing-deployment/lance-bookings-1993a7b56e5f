@@ -1,0 +1,130 @@
+name: ghl-bookings
+
+# Count today's and yesterday's Book-A-Call bookings in GoHighLevel and publish the
+# counts as bookings.json on the `data` branch, then start the next run 5 minutes on.
+# The dashboard reads that file for "Scheduled Calls".
+#
+# GHL_API_KEY lives only in Actions Secrets. It can read every CFS contact, so it never
+# touches the repo or the page; bookings.json carries counts only.
+#
+# The data goes to its own branch, force-pushed as a single commit, so it neither grows
+# history nor triggers a Pages rebuild of `main` every five minutes.
+
+on:
+  # THE SCHEDULE IS THE CHAIN AT THE FOOT OF THIS JOB, NOT THIS CRON. GitHub's scheduler
+  # sheds runs on this account's free public repos (measured 2026-08-27 on the PBI
+  # dashboard: multi-hour holes, whole slots never fired). The cron is only a way back
+  # in if the chain breaks.
+  schedule:
+    - cron: "*/30 * * * *"
+
+  workflow_dispatch:
+
+  push:
+    branches: [main]
+    paths:
+      - ghl_bookings.py
+      - .github/workflows/ghl-bookings.yml
+
+permissions:
+  contents: write # force-push the data branch
+  actions: write # dispatch the next link of the chain
+
+# One run at a time. GitHub keeps only the newest *pending* run per group, which stops
+# several triggers from turning into several parallel chains.
+concurrency:
+  group: ghl-bookings
+  cancel-in-progress: false
+
+jobs:
+  bookings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # The hold near the foot is measured from here, so a slow run eats its own slack.
+      - name: Mark the start
+        env:
+          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+        run: |
+          echo "RUN_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+          # Without the key there is nothing to do, and chaining would just spin a
+          # no-op run every five minutes. Skip cleanly and stop; once the secret is
+          # added, start the chain again with: gh workflow run ghl-bookings.yml
+          if [ -n "$GHL_API_KEY" ]; then
+            echo "HAS_KEY=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::GHL_API_KEY secret is not set. Skipping, and not chaining."
+          fi
+
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+
+      - name: Count bookings
+        if: env.HAS_KEY == 'true'
+        env:
+          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+        run: python3 ghl_bookings.py "$RUNNER_TEMP/bookings.json"
+
+      - name: Publish to the data branch
+        if: env.HAS_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir "$RUNNER_TEMP/pub" && cd "$RUNNER_TEMP/pub"
+          git init -q -b data
+          cp "$RUNNER_TEMP/bookings.json" .
+          git add bookings.json
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qm "GHL bookings $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+
+      # GitHub disables cron schedules in repos with no commit activity for 60 days.
+      - name: Keep the fallback schedule alive
+        if: env.HAS_KEY == 'true'
+        run: |
+          LAST=$(git log -1 --format=%ct)
+          if [ $(( ($(date +%s) - LAST) / 86400 )) -ge 50 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep the fallback schedule alive"
+            git push
+          fi
+
+      # ----------------------------------------------------------------- the chain
+      # A FAILED run still hands on (a failed pull is when the next attempt matters
+      # most); `!cancelled()` excludes only a deliberate Cancel, which stops the chain.
+      - name: Hold until the five minutes are up
+        if: ${{ !cancelled() && env.HAS_KEY == 'true' }}
+        run: |
+          TARGET=$((RUN_STARTED + 270))     # dispatch and runner startup add the rest
+          NOW=$(date +%s)
+          if [ "$NOW" -lt "$TARGET" ]; then sleep $((TARGET - NOW)); fi
+
+      - name: Start the next link
+        if: ${{ !cancelled() && env.HAS_KEY == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Count every run that has not completed, not just `queued`: a run held by the
+          # concurrency group reports `pending`, and dispatching over a pending run
+          # cancels it.
+          count_others() {
+            gh run list -R "$GITHUB_REPOSITORY" --workflow ghl-bookings.yml --limit 20 \
+              --json databaseId,status \
+              --jq "[.[] | select(.status != \"completed\" and .databaseId != ${{ github.run_id }})] | length" \
+              || echo 0
+          }
+          if [ "$(count_others)" -gt 0 ]; then
+            echo "::notice::A run is already waiting; it carries the chain."
+            exit 0
+          fi
+          gh workflow run ghl-bookings.yml -R "$GITHUB_REPOSITORY"
+          sleep 15
+          if [ "$(count_others)" -gt 0 ]; then
+            echo "::notice::Next link is live."
+          else
+            echo "::error::Dispatched the next link and nothing appeared. The chain is broken;"
+            echo "::error::bookings now refresh only when the fallback cron fires. Re-run this workflow."
+            exit 1
+          fi
