@@ -15,6 +15,7 @@ import sys
 import urllib.request
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 LOCATION_ID = "drk0ArGlymV297Q7swkl"
@@ -43,6 +44,35 @@ def fetch_events(key, start, end):
         return json.load(resp).get("events", [])
 
 
+def contact_source(key, contact_id, cache):
+    """Classify a booking's first-touch source: "meta" or "other" (Google, YouTube, organic search).
+
+    Added 2026-11-03: the calendar is shared by every funnel, so Google/YouTube bookings
+    (event.legetty.com/youtube, /google) were inflating the Meta dashboard. Anything that
+    is not clearly search/YouTube counts as Meta, the same as before this change.
+    """
+    if contact_id in cache:
+        return cache[contact_id]
+    kind = "meta"
+    try:
+        url = f"https://services.leadconnectorhq.com/contacts/{contact_id}"
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {key}", "Version": "2021-07-28",
+            "Accept": "application/json", "User-Agent": "curl/8.7.1"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            a = json.load(resp).get("contact", {}).get("attributionSource") or {}
+        page = urlparse(a.get("url") or "")
+        path = page.path.rstrip("/").lower()
+        if ((a.get("sessionSource") or "") in ("Paid Search", "Organic Search")
+                or (a.get("utmSource") or "").lower() in ("google", "youtube")
+                or (page.netloc.endswith("event.legetty.com") and path in ("/youtube", "/google"))):
+            kind = "other"
+    except Exception as exc:  # a failed lookup must not drop a booking: count it as Meta
+        print("source lookup failed:", exc, file=sys.stderr)
+    cache[contact_id] = kind
+    return kind
+
+
 def main():
     key = os.environ.get("GHL_API_KEY", "").strip()
     if not key:
@@ -61,7 +91,8 @@ def main():
     end = datetime.combine(today + timedelta(days=7), datetime.min.time(), TZ)
     events = fetch_events(key, start, end)
 
-    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter()}
+    cache = {}
+    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter(), "all_total": 0, "other_sources": 0}
             for d in sorted(wanted)}
     for ev in events:
         if ev.get("deleted") or not ev.get("dateAdded"):
@@ -71,6 +102,10 @@ def main():
         if day not in wanted:
             continue
         bucket = days[day]
+        bucket["all_total"] += 1
+        if contact_source(key, ev.get("contactId"), cache) == "other":
+            bucket["other_sources"] += 1
+            continue
         bucket["total"] += 1
         bucket["status"][ev.get("appointmentStatus") or "unknown"] += 1
         bucket["source"][(ev.get("createdBy") or {}).get("source") or "unknown"] += 1
@@ -80,7 +115,7 @@ def main():
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "timezone": "America/Denver",
         "calendar_id": CALENDAR_ID,
-        "definition": "Appointments on the Book-A-Call calendar, counted on the day they were booked (dateAdded), deleted excluded.",
+        "definition": "Appointments on the Book-A-Call calendar, counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
         "days": {d: {k: (dict(v) if isinstance(v, Counter) else v) for k, v in b.items()}
                  for d, b in days.items()},
     }
