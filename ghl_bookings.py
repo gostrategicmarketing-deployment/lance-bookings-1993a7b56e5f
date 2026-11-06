@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Count today's and yesterday's bookings on the Book-A-Call GHL calendar.
+"""Count today's and yesterday's bookings on the Book-A-Call GHL calendars.
 
 Writes COUNTS ONLY (no names, emails, or contact ids) to the path given as argv[1].
-The dashboard reads that file for its "Scheduled Calls" number, because GHL is the
+The dashboard reads that file for its "College Funding Calls" number, because GHL is the
 source of truth for a booked call; Meta's Schedule event is the fallback.
 
 The API key arrives as the GHL_API_KEY environment variable (an Actions secret).
@@ -19,17 +19,24 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 LOCATION_ID = "drk0ArGlymV297Q7swkl"
-# "Real Estate College Funding Secrets 1 on 1 mtg": the calendar embedded on the
-# Book-A-Call funnel. The other calendars in the location are not this funnel.
-CALENDAR_ID = "jz4PWYKlNfHjOEj0p1p5"
+# The calendars the Book-A-Call funnel books into. The other calendars in the location
+# are closer / specialist calendars, not this funnel.
+#   jz4PWYKlNfHjOEj0p1p5  the original Book-A-Call calendar (was "Real Estate College Funding
+#                         Secrets 1 on 1 mtg", renamed "Tax Scholarships 1 on 1 mtg").
+#   OktfSo1igkPAh08dRHHP  "College Funding Call" (round robin, widget college-funding-calls),
+#                         first bookings 2026-11-06; part of the funnel's bookings moved here.
+CALENDARS = {
+    "jz4PWYKlNfHjOEj0p1p5": "Tax Scholarships 1 on 1 mtg",
+    "OktfSo1igkPAh08dRHHP": "College Funding Call",
+}
 # Both Meta ad accounts report in America/Denver, so "today" here matches Meta's.
 TZ = ZoneInfo("America/Denver")
 
 
-def fetch_events(key, start, end):
+def fetch_events(key, calendar_id, start, end):
     url = (
         "https://services.leadconnectorhq.com/calendars/events"
-        f"?locationId={LOCATION_ID}&calendarId={CALENDAR_ID}"
+        f"?locationId={LOCATION_ID}&calendarId={calendar_id}"
         f"&startTime={int(start.timestamp() * 1000)}&endTime={int(end.timestamp() * 1000)}"
     )
     req = urllib.request.Request(url, headers={
@@ -60,13 +67,16 @@ def contact_source(key, contact_id, cache):
             "Authorization": f"Bearer {key}", "Version": "2021-07-28",
             "Accept": "application/json", "User-Agent": "curl/8.7.1"})
         with urllib.request.urlopen(req, timeout=60) as resp:
-            a = json.load(resp).get("contact", {}).get("attributionSource") or {}
-        page = urlparse(a.get("url") or "")
-        path = page.path.rstrip("/").lower()
-        if ((a.get("sessionSource") or "") in ("Paid Search", "Organic Search")
-                or (a.get("utmSource") or "").lower() in ("google", "youtube")
-                or (page.netloc.endswith("event.legetty.com") and path in ("/youtube", "/google"))):
-            kind = "other"
+            c = json.load(resp).get("contact", {})
+        # Check BOTH touches: a contact can first arrive via Meta and then book through the
+        # Google/YouTube page (lastAttributionSource), which the first touch alone misses.
+        for a in (c.get("attributionSource") or {}, c.get("lastAttributionSource") or {}):
+            page = urlparse(a.get("url") or "")
+            path = page.path.rstrip("/").lower()
+            if ((a.get("sessionSource") or "") in ("Paid Search", "Organic Search")
+                    or (a.get("utmSource") or "").lower() in ("google", "youtube")
+                    or (page.netloc.endswith("event.legetty.com") and path in ("/youtube", "/google"))):
+                kind = "other"
     except Exception as exc:  # a failed lookup must not drop a booking: count it as Meta
         print("source lookup failed:", exc, file=sys.stderr)
     cache[contact_id] = kind
@@ -85,14 +95,18 @@ def main():
     wanted = {today.isoformat(), yesterday.isoformat()}
 
     # The API filters on appointment START time, but a booking counts on the day it
-    # was MADE. The calendar only books 4 hours to 4 days ahead, so every booking
-    # made yesterday or today starts inside this window.
+    # was MADE. The calendars book only a few days ahead, so every booking made
+    # yesterday or today starts inside this window (14 days covers a wider setting).
     start = datetime.combine(yesterday, datetime.min.time(), TZ)
-    end = datetime.combine(today + timedelta(days=7), datetime.min.time(), TZ)
-    events = fetch_events(key, start, end)
+    end = datetime.combine(today + timedelta(days=14), datetime.min.time(), TZ)
+    events = []
+    for cal_id in CALENDARS:
+        for ev in fetch_events(key, cal_id, start, end):
+            ev["_calendar"] = CALENDARS[cal_id]
+            events.append(ev)
 
     cache = {}
-    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter(), "all_total": 0, "other_sources": 0}
+    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter(), "by_calendar": Counter(), "all_total": 0, "other_sources": 0}
             for d in sorted(wanted)}
     for ev in events:
         if ev.get("deleted") or not ev.get("dateAdded"):
@@ -110,12 +124,13 @@ def main():
         bucket["status"][ev.get("appointmentStatus") or "unknown"] += 1
         bucket["source"][(ev.get("createdBy") or {}).get("source") or "unknown"] += 1
         bucket["by_hour"][str(made.hour)] += 1
+        bucket["by_calendar"][ev["_calendar"]] += 1
 
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "timezone": "America/Denver",
-        "calendar_id": CALENDAR_ID,
-        "definition": "Appointments on the Book-A-Call calendar, counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
+        "calendar_ids": list(CALENDARS),
+        "definition": "Appointments on the Book-A-Call calendars (Tax Scholarships 1 on 1 mtg + College Funding Call), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
         "days": {d: {k: (dict(v) if isinstance(v, Counter) else v) for k, v in b.items()}
                  for d, b in days.items()},
     }
