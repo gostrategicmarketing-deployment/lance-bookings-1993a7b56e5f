@@ -11,6 +11,7 @@ CFS contact.
 """
 import json
 import os
+import re
 import sys
 import urllib.request
 from collections import Counter
@@ -21,16 +22,64 @@ from zoneinfo import ZoneInfo
 LOCATION_ID = "drk0ArGlymV297Q7swkl"
 # The calendars the Book-A-Call funnel books into. The other calendars in the location
 # are closer / specialist calendars, not this funnel.
-#   jz4PWYKlNfHjOEj0p1p5  the original Book-A-Call calendar (was "Real Estate College Funding
-#                         Secrets 1 on 1 mtg", renamed "Tax Scholarships 1 on 1 mtg").
-#   OktfSo1igkPAh08dRHHP  "College Funding Call" (round robin, widget college-funding-calls),
-#                         first bookings 2026-11-06; part of the funnel's bookings moved here.
-CALENDARS = {
-    "jz4PWYKlNfHjOEj0p1p5": "Tax Scholarships 1 on 1 mtg",
-    "OktfSo1igkPAh08dRHHP": "College Funding Call",
+# 2026-11-11 (Phil): GHL keeps renaming these, and bookings come from THREE funnel pages, so
+# the list is read live off those pages every run (any embedded id that is a calendar in the
+# location counts). KNOWN_CALENDARS stays as a floor so a swap does not drop past bookings,
+# and a calendar once seen on a page keeps counting (SEEN file, local publisher only).
+#   jz4PWYKlNfHjOEj0p1p5  original Book-A-Call calendar, on the Real Estate CFS home page
+#   OktfSo1igkPAh08dRHHP  round robin since 2026-11-06, on college.legetty.com/meta + event.legetty.com/meta
+FUNNEL_PAGES = {
+    "College Legetty": "https://college.legetty.com/meta",
+    "Event Legetty": "https://event.legetty.com/meta",
+    "Real Estate CFS": "https://realestatecollegefundingsecrets.com/",
 }
+KNOWN_CALENDARS = {"jz4PWYKlNfHjOEj0p1p5", "OktfSo1igkPAh08dRHHP"}
+GHL_ID = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9]{20}(?![A-Za-z0-9])")
 # Both Meta ad accounts report in America/Denver, so "today" here matches Meta's.
 TZ = ZoneInfo("America/Denver")
+
+
+def ghl_get(key, url, version="2021-04-15"):
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {key}", "Version": version,
+        "Accept": "application/json", "User-Agent": "curl/8.7.1"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.load(resp)
+
+
+def funnel_calendars(key, seen_path):
+    """{calendar id: {"name": current GHL name, "pages": [funnel pages embedding it]}}."""
+    names = {c["id"]: c["name"] for c in ghl_get(
+        key, f"https://services.leadconnectorhq.com/calendars/?locationId={LOCATION_ID}").get("calendars", [])}
+    try:
+        with open(seen_path) as f:
+            seen = set(json.load(f))
+    except Exception:
+        seen = set()
+    found, notes = {}, []
+    for label, url in FUNNEL_PAGES.items():
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                html = resp.read().decode("utf-8", "replace")
+        except Exception as exc:
+            notes.append(f"could not read {label} page: {exc}")
+            continue
+        hits = set(GHL_ID.findall(html)) & names.keys()
+        if not hits:
+            notes.append(f"no calendar found on {label} page")
+        for cid in hits:
+            found.setdefault(cid, []).append(label)
+    ids = KNOWN_CALENDARS | seen | set(found)
+    try:
+        with open(seen_path, "w") as f:
+            json.dump(sorted(ids), f)
+    except Exception:
+        pass
+    for n in notes:
+        print(n, file=sys.stderr)
+    return {cid: {"name": names.get(cid, "(deleted calendar)"), "pages": found.get(cid, [])}
+            for cid in sorted(ids)}, notes
 
 
 def fetch_events(key, calendar_id, start, end):
@@ -99,10 +148,13 @@ def main():
     # yesterday or today starts inside this window (14 days covers a wider setting).
     start = datetime.combine(yesterday, datetime.min.time(), TZ)
     end = datetime.combine(today + timedelta(days=14), datetime.min.time(), TZ)
+    seen_path = os.environ.get("CALENDARS_SEEN_FILE") or os.path.join(
+        os.path.dirname(os.path.abspath(out_path)), "calendars_seen.json")
+    calendars, notes = funnel_calendars(key, seen_path)
     events = []
-    for cal_id in CALENDARS:
+    for cal_id, cal in calendars.items():
         for ev in fetch_events(key, cal_id, start, end):
-            ev["_calendar"] = CALENDARS[cal_id]
+            ev["_calendar"] = cal["name"]
             events.append(ev)
 
     cache = {}
@@ -129,8 +181,10 @@ def main():
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "timezone": "America/Denver",
-        "calendar_ids": list(CALENDARS),
-        "definition": "Appointments on the Book-A-Call calendars (Tax Scholarships 1 on 1 mtg + College Funding Call), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
+        "calendar_ids": list(calendars),
+        "calendars": calendars,
+        "calendar_notes": notes,
+        "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
         "days": {d: {k: (dict(v) if isinstance(v, Counter) else v) for k, v in b.items()}
                  for d, b in days.items()},
     }
