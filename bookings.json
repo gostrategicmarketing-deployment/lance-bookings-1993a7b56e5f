@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-11-14T16:54:18+00:00",
+  "timezone": "America/Denver",
+  "calendar_ids": [
+    "OktfSo1igkPAh08dRHHP",
+    "jz4PWYKlNfHjOEj0p1p5"
+  ],
+  "calendars": {
+    "OktfSo1igkPAh08dRHHP": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "College Legetty",
+        "Event Legetty"
+      ]
+    },
+    "jz4PWYKlNfHjOEj0p1p5": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "Real Estate CFS"
+      ]
+    }
+  },
+  "calendar_notes": [],
+  "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
+  "days": {
+    "2026-11-13": {
+      "total": 15,
+      "status": {
+        "confirmed": 14,
+        "showed": 1
+      },
+      "source": {
+        "booking_widget": 15
+      },
+      "by_hour": {
+        "10": 1,
+        "13": 2,
+        "7": 1,
+        "16": 1,
+        "22": 1,
+        "3": 1,
+        "20": 2,
+        "9": 2,
+        "12": 1,
+        "6": 1,
+        "11": 1,
+        "15": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 15
+      },
+      "all_total": 17,
+      "other_sources": 2
+    },
+    "2026-11-14": {
+      "total": 15,
+      "status": {
+        "confirmed": 15
+      },
+      "source": {
+        "booking_widget": 15
+      },
+      "by_hour": {
+        "6": 5,
+        "8": 5,
+        "5": 4,
+        "4": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 15
+      },
+      "all_total": 15,
+      "other_sources": 0
+    }
+  }
+}
