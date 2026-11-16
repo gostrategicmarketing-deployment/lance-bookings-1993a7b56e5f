@@ -33,6 +33,12 @@ FUNNEL_PAGES = {
     "Event Legetty": "https://event.legetty.com/meta",
     "Real Estate CFS": "https://realestatecollegefundingsecrets.com/",
 }
+# 2026-11-16 (Phil): a call counts only when it was booked from a funnel page location (the
+# hosts below; /youtube and /google are still excluded as "other"). Bookings made through a
+# direct calendar link (bookings.collegefundingsecrets.com/widget/bookings/...) are not funnel
+# bookings: on 11-16 they were the 3 extra (15 shown vs the 12 Phil counted in GHL funnel stats).
+# Judged by the contact's last-touch page. A failed lookup ("(unknown)") still counts.
+FUNNEL_HOSTS = ("legetty.com", "realestatecollegefundingsecrets.com")
 KNOWN_CALENDARS = {"jz4PWYKlNfHjOEj0p1p5", "OktfSo1igkPAh08dRHHP"}
 GHL_ID = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9]{20}(?![A-Za-z0-9])")
 # Both Meta ad accounts report in America/Denver, so "today" here matches Meta's.
@@ -109,7 +115,7 @@ def contact_source(key, contact_id, cache):
     """
     if contact_id in cache:
         return cache[contact_id]
-    kind = "meta"
+    kind, page_key = "meta", "(unknown)"
     try:
         url = f"https://services.leadconnectorhq.com/contacts/{contact_id}"
         req = urllib.request.Request(url, headers={
@@ -119,6 +125,9 @@ def contact_source(key, contact_id, cache):
             c = json.load(resp).get("contact", {})
         # Check BOTH touches: a contact can first arrive via Meta and then book through the
         # Google/YouTube page (lastAttributionSource), which the first touch alone misses.
+        last = urlparse((c.get("lastAttributionSource") or c.get("attributionSource") or {}).get("url") or "")
+        if last.netloc:
+            page_key = last.netloc.lower().removeprefix("www.") + (last.path.rstrip("/").lower() or "/")
         for a in (c.get("attributionSource") or {}, c.get("lastAttributionSource") or {}):
             page = urlparse(a.get("url") or "")
             path = page.path.rstrip("/").lower()
@@ -128,8 +137,8 @@ def contact_source(key, contact_id, cache):
                 kind = "other"
     except Exception as exc:  # a failed lookup must not drop a booking: count it as Meta
         print("source lookup failed:", exc, file=sys.stderr)
-    cache[contact_id] = kind
-    return kind
+    cache[contact_id] = (kind, page_key)
+    return cache[contact_id]
 
 
 def main():
@@ -158,7 +167,9 @@ def main():
             events.append(ev)
 
     cache = {}
-    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter(), "by_calendar": Counter(), "all_total": 0, "other_sources": 0}
+    days = {d: {"total": 0, "status": Counter(), "source": Counter(), "by_hour": Counter(), "by_calendar": Counter(), "all_total": 0, "other_sources": 0,
+                "by_page": Counter(), "other_by_page": Counter(),
+                "off_funnel": 0, "off_funnel_by_page": Counter(), "contacts": set()}
             for d in sorted(wanted)}
     for ev in events:
         if ev.get("deleted") or not ev.get("dateAdded"):
@@ -169,9 +180,18 @@ def main():
             continue
         bucket = days[day]
         bucket["all_total"] += 1
-        if contact_source(key, ev.get("contactId"), cache) == "other":
+        kind, page_key = contact_source(key, ev.get("contactId"), cache)
+        if kind == "other":
             bucket["other_sources"] += 1
+            bucket["other_by_page"][page_key] += 1
             continue
+        host = page_key.split("/", 1)[0]
+        if page_key != "(unknown)" and not any(host == h or host.endswith("." + h) for h in FUNNEL_HOSTS):
+            bucket["off_funnel"] += 1
+            bucket["off_funnel_by_page"][page_key] += 1
+            continue
+        bucket["by_page"][page_key] += 1
+        bucket["contacts"].add(ev.get("contactId"))
         bucket["total"] += 1
         bucket["status"][ev.get("appointmentStatus") or "unknown"] += 1
         bucket["source"][(ev.get("createdBy") or {}).get("source") or "unknown"] += 1
@@ -184,9 +204,9 @@ def main():
         "calendar_ids": list(calendars),
         "calendars": calendars,
         "calendar_notes": notes,
-        "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see all_total / other_sources).",
-        "days": {d: {k: (dict(v) if isinstance(v, Counter) else v) for k, v in b.items()}
-                 for d, b in days.items()},
+        "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see other_sources), and only bookings whose last-touch page is a funnel page location (legetty.com, realestatecollegefundingsecrets.com) count; direct calendar-link bookings are excluded (see off_funnel). by_page = counted bookings per page.",
+        "days": {d: {k: (len(v) if isinstance(v, set) else dict(v) if isinstance(v, Counter) else v)
+                     for k, v in b.items()} for d, b in days.items()},
     }
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
