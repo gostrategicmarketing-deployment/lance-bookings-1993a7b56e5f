@@ -1,0 +1,108 @@
+{
+  "generated_at": "2026-11-21T12:53:29+00:00",
+  "timezone": "America/Denver",
+  "calendar_ids": [
+    "OktfSo1igkPAh08dRHHP",
+    "jz4PWYKlNfHjOEj0p1p5"
+  ],
+  "calendars": {
+    "OktfSo1igkPAh08dRHHP": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "College Legetty",
+        "Event Legetty"
+      ]
+    },
+    "jz4PWYKlNfHjOEj0p1p5": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "Real Estate CFS"
+      ]
+    }
+  },
+  "calendar_notes": [],
+  "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see other_sources), and only bookings whose last-touch page is a funnel page location (legetty.com, realestatecollegefundingsecrets.com) count; direct calendar-link bookings are excluded (see off_funnel). by_page = counted bookings per page.",
+  "days": {
+    "2026-11-20": {
+      "total": 30,
+      "status": {
+        "confirmed": 28,
+        "showed": 1,
+        "invalid": 1
+      },
+      "source": {
+        "booking_widget": 30
+      },
+      "by_hour": {
+        "5": 6,
+        "9": 4,
+        "16": 2,
+        "8": 2,
+        "4": 1,
+        "17": 1,
+        "0": 1,
+        "11": 1,
+        "7": 1,
+        "6": 4,
+        "20": 2,
+        "22": 1,
+        "19": 1,
+        "21": 1,
+        "12": 1,
+        "18": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 30
+      },
+      "all_total": 32,
+      "other_sources": 2,
+      "by_page": {
+        "college.legetty.com/meta-page": 5,
+        "college.legetty.com/meta2": 1,
+        "event.legetty.com/meta": 2,
+        "realestatecollegefundingsecrets.com/": 19,
+        "realestatecollegefundingsecrets.com/home": 3
+      },
+      "other_by_page": {
+        "bookings.collegefundingsecrets.com/widget/bookings/account-manager-1-on-1-meeting": 1,
+        "bookings.collegefundingsecrets.com/widget/bookings/creative-college-funding-appointment": 1
+      },
+      "off_funnel": 0,
+      "off_funnel_by_page": {},
+      "contacts": 30
+    },
+    "2026-11-21": {
+      "total": 6,
+      "status": {
+        "confirmed": 6
+      },
+      "source": {
+        "booking_widget": 6
+      },
+      "by_hour": {
+        "5": 2,
+        "0": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 6
+      },
+      "all_total": 7,
+      "other_sources": 1,
+      "by_page": {
+        "event.legetty.com/meta": 1,
+        "college.legetty.com/meta-var": 1,
+        "college.legetty.com/meta-vsl": 1,
+        "realestatecollegefundingsecrets.com/": 3
+      },
+      "other_by_page": {
+        "college.legetty.com/youtube-vsl": 1
+      },
+      "off_funnel": 0,
+      "off_funnel_by_page": {},
+      "contacts": 6
+    }
+  }
+}
