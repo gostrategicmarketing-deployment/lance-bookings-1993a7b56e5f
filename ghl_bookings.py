@@ -208,8 +208,25 @@ def main():
         "days": {d: {k: (len(v) if isinstance(v, set) else dict(v) if isinstance(v, Counter) else v)
                      for k, v in b.items()} for d, b in days.items()},
     }
+    # Phil 2026-11-22: College Funding Calls on the dashboard = Hyros Meta-attributed Tax
+    # Scholarship calls (last click). Optional: without HYROS_API_KEY, or if Hyros fails,
+    # the GHL counts above still publish and the dashboard falls back to them.
+    hkey = os.environ.get("HYROS_API_KEY", "").strip()
+    if hkey:
+        try:
+            from hyros_calls import tax_scholarship_counts
+            payload["hyros"] = {
+                "definition": "Hyros calls named Tax Scholarship 1 on 1 Meeting whose last-click source is a Meta (Facebook) ad, counted on the day Hyros created the call, Mountain time. meta_calls is the dashboard number; all_calls is every Tax Scholarship call that day, any source.",
+                "days": tax_scholarship_counts(hkey, wanted, TZ),
+            }
+        except Exception as e:
+            payload["hyros_error"] = str(e)[:300]
+    else:
+        payload["hyros_error"] = "HYROS_API_KEY not set"
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
+    if "hyros" in payload:
+        print("hyros meta:", json.dumps({d: b["meta_calls"] for d, b in payload["hyros"]["days"].items()}))
     print(json.dumps({d: b["total"] for d, b in payload["days"].items()}), "->", out_path)
 
 
