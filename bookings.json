@@ -1,0 +1,100 @@
+{
+  "generated_at": "2026-11-28T13:58:13+00:00",
+  "timezone": "America/Denver",
+  "calendar_ids": [
+    "OktfSo1igkPAh08dRHHP",
+    "jz4PWYKlNfHjOEj0p1p5"
+  ],
+  "calendars": {
+    "OktfSo1igkPAh08dRHHP": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "College Legetty",
+        "Event Legetty"
+      ]
+    },
+    "jz4PWYKlNfHjOEj0p1p5": {
+      "name": "Tax Scholarship 1 on 1 Meeting",
+      "pages": [
+        "Real Estate CFS"
+      ]
+    }
+  },
+  "calendar_notes": [],
+  "definition": "Appointments on the calendars embedded in the Book-A-Call funnel pages (College Legetty /meta, Event Legetty /meta, Real Estate CFS home; read live each run, matched by calendar id, a calendar once seen keeps counting), counted on the day they were booked (dateAdded), deleted excluded, Google/YouTube/organic-search sources excluded from total (see other_sources), and only bookings whose last-touch page is a funnel page location (legetty.com, realestatecollegefundingsecrets.com) count; direct calendar-link bookings are excluded (see off_funnel). by_page = counted bookings per page.",
+  "days": {
+    "2026-11-27": {
+      "total": 20,
+      "status": {
+        "noshow": 3,
+        "confirmed": 17
+      },
+      "source": {
+        "booking_widget": 20
+      },
+      "by_hour": {
+        "8": 2,
+        "13": 3,
+        "5": 1,
+        "18": 1,
+        "20": 1,
+        "6": 3,
+        "16": 3,
+        "0": 1,
+        "9": 2,
+        "10": 2,
+        "21": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 20
+      },
+      "all_total": 22,
+      "other_sources": 0,
+      "by_page": {
+        "college.legetty.com/meta2": 5,
+        "event.legetty.com/meta": 5,
+        "college.legetty.com/meta-page": 3,
+        "college.legetty.com/meta-var": 1,
+        "college.legetty.com/meta-vsl": 2,
+        "realestatecollegefundingsecrets.com/": 4
+      },
+      "other_by_page": {},
+      "off_funnel": 2,
+      "off_funnel_by_page": {
+        "bookings.collegefundingsecrets.com/widget/bookings/creative-college-funding-appointment": 2
+      },
+      "contacts": 20
+    },
+    "2026-11-28": {
+      "total": 5,
+      "status": {
+        "confirmed": 5
+      },
+      "source": {
+        "booking_widget": 5
+      },
+      "by_hour": {
+        "6": 2,
+        "0": 1,
+        "5": 1,
+        "4": 1
+      },
+      "by_calendar": {
+        "Tax Scholarship 1 on 1 Meeting": 5
+      },
+      "all_total": 5,
+      "other_sources": 0,
+      "by_page": {
+        "college.legetty.com/meta-var": 1,
+        "college.legetty.com/meta2": 2,
+        "college.legetty.com/meta-page": 1,
+        "realestatecollegefundingsecrets.com/": 1
+      },
+      "other_by_page": {},
+      "off_funnel": 0,
+      "off_funnel_by_page": {},
+      "contacts": 5
+    }
+  },
+  "hyros_error": "HYROS_API_KEY not set"
+}
