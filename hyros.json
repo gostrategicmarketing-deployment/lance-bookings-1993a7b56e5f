@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-11-28T13:55:41+00:00",
+  "timezone": "America/Denver",
+  "definition": "Hyros calls named Tax Scholarship 1 on 1 Meeting whose last-click source is a Meta (Facebook) ad, counted on the day Hyros created the call, Mountain time. meta_calls is the dashboard number; all_calls is every Tax Scholarship call that day, any source.",
+  "days": {
+    "2026-11-27": {
+      "meta_calls": 20,
+      "all_calls": 21,
+      "by_platform": {
+        "FACEBOOK": 20,
+        "none": 1
+      },
+      "by_state": {
+        "QUALIFIED": 18,
+        "NO_SHOW": 3
+      }
+    },
+    "2026-11-28": {
+      "meta_calls": 5,
+      "all_calls": 5,
+      "by_platform": {
+        "FACEBOOK": 5
+      },
+      "by_state": {
+        "QUALIFIED": 5
+      }
+    }
+  }
+}
